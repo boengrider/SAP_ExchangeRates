@@ -143,8 +143,8 @@ End If
 '++++++++++++++++++++++++++++++++
 'Intialize TCD calendar
 oTCD.Init "Provider=Microsoft.ACE.OLEDB.12.0;WSS;IMEX=1;RetrieveIds=Yes;" & _
-		  "DATABASE=https://volvogroup.sharepoint.com/sites/unit-financean/exrate/RO01_exrate;" & _
-		  "LIST=RO01_exrate_calendar;"
+"DATABASE=SHAREPOINT_LIST_URL_GOES_HERE;" & _
+"LIST=SHAREPOINT_LIST_NAME_GOES_HERE;"
 		  
 
 oFirstNonTcdDate = oTCD.firstNTCD(oTargetDate - 1) 'Subtract 1 so that we don't need to check if this is ondemand or not. If target date is Target=Today + 1 (normal automated workflow when today we upload rates for tomorrow) 
