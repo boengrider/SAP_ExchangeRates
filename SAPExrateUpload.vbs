@@ -261,7 +261,6 @@ Else
 	oMAIL.SendMessage FOLDER & "\" & oDF.ToYearMonthDay(oTargetDate) & ".txt" & " successfully verified","I",oSPL.SAPsysName
 End If 
 
-Checkin PROJECT, RESOURCE_NAME
 WScript.Quit 0 ' OK 
 
 
@@ -1149,7 +1148,7 @@ Class Mailer
    				("http://schemas.microsoft.com/cdo/configuration/sendusing") = 2
 				.Configuration.Fields.Item _
     			("http://schemas.microsoft.com/cdo/configuration/smtpserver") = _
-        		"mailgot.it.volvo.net" 
+        		"MAIL_SEVER_NAME_GOES_HERE" 
 				.Configuration.Fields.Item _
   	    		("http://schemas.microsoft.com/cdo/configuration/smtpserverport") = 25
   	    		.TextBody = strMessage
@@ -1173,118 +1172,3 @@ Class Mailer
 	End Property 
 	
 End Class 
-
-
-'Function for checkig-in to the watchdog list
-Function Checkin(sProjectName,sResourceName)
-	Dim sUserName,sUserSecret,sSiteUrl,sDomain,sTenantID,sClientID,sXDigest,sAccessToken,tmp,rxResult
-	Dim oHTTP : Set oHTTP = CreateObject("MSXML2.ServerXMLHTTP.3.0")
-	Dim oXML : Set oXML = CreateObject("MSXML2.DOMDOCUMENT")
-	Dim oCON : Set oCON = CreateObject("Adodb.Connection")
-	Dim oRST : Set oRST = CreateObject("Adodb.Recordset")
-	Dim oRX : Set oRX = New RegExp
-	Dim connectionString : connectionString = "Provider=Microsoft.ACE.OLEDB.12.0;WSS;IMEX=1;RetrieveIds=Yes;" & _
-							 "DATABASE=https://volvogroup.sharepoint.com/sites/unit-rc-sk-bs-it/CREDENTIALS;" & _
-						 	 "LIST=CREDENTIALS;"
-	
-	'Load credentials from SP list
-	oCON.ConnectionString = connectionString
-	oCON.Open
-	oRST.Open "SELECT Host,Username,Password FROM [CREDENTIALS] WHERE Title='" & sResourceName & "';", oCON, 3, 3
-	
-	If oRST.EOF Or oRST.BOF Then
-		Checkin = 0
-		Exit Function 
-	End If 
-     
-	oRX.Pattern = "^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n?]+)"
-	oRX.Global = True
-	
-	oRST.MoveFirst
-	
-	sDomain = oRX.Execute(oRST.Fields("Host").Value)(0)
-	oRX.Pattern = "(http:\/\/|https:\/\/)"
-	
-	sDomain = oRX.Replace(sDomain,"")
-	sUserName = oRST.Fields("Username").Value
-	sUserSecret = oRST.Fields("Password").Value
-	sSiteUrl = oRST.Fields("Host").Value
-	
-	oRST.Close
-
-	'Get TenantID & ClientID/ResourceID
-	On Error Resume Next 
-	With oHTTP
-		.open "GET",sSiteUrl & "/_vti_bin/client.svc",False
-		.setRequestHeader "Authorization","Bearer"
-		.send
-	End With
-		
-	oRX.Pattern = "Bearer realm=""([a-zA-Z0-9]{1,}-)*[a-zA-Z0-9]{12}"
-	Set rxResult = oRX.Execute(oHTTP.getResponseHeader("WWW-Authenticate"))
-	oRX.Pattern = "[a-fA-F0-9]{8}-([a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}"
-	sTenantID = oRX.Execute(rxResult(0))(0)
-	
-	oRX.Pattern = "client_id=""[a-fA-F0-9]{8}-([a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}"
-	Set rxResult = oRX.Execute(oHTTP.getResponseHeader("WWW-Authenticate"))
-	oRX.Pattern = "[a-fA-F0-9]{8}-([a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}"
-	sClientID = oRX.Execute(rxResult(0))(0)
-	
-	'Get AccessToken
-	Dim sBody : sBody = "grant_type=client_credentials&client_id=" & sUserName & "@" & sTenantID & "&client_secret=" & sUserSecret & "&resource=" & sClientID & "/" & sDomain & "@" & sTenantID
-	With oHTTP
-		.open "POST", "https://accounts.accesscontrol.windows.net/" & sTenantID & "/tokens/OAuth/2", False
-		.setRequestHeader "Host","accounts.accesscontrol.windows.net"
-		.setRequestHeader "Content-Type","application/x-www-form-urlencoded"
-		.setRequestHeader "Content-Length", CStr(Len(sBody))
-		.send sBody
-	End With 
-	
-	oRX.Pattern = "access_token"":"".*"
-	Set rxResult = oRX.Execute(oHTTP.responseText)
-	rxResult = Split(rxResult(0),":")
-	rxResult(1) = Replace(rxResult(1),"""","")
-	rxResult(1) = Replace(rxResult(1),"}","")
-	sAccessToken = rxResult(1) ' Save the token 
-	
-	'Get XDigest
-	With oHTTP
-		oHTTP.open "POST", sSiteUrl & "/_api/contextinfo", False 
-		oHTTP.setRequestHeader "accept","application/atom+xml;odata=verbose"
-		oHTTP.setRequestHeader "authorization", "Bearer " & sAccessToken
-		oHTTP.send
-	End With 
-	
-	oXML.loadXML oHTTP.responseText
-	sXDigest = oXML.selectSingleNode("//d:FormDigestValue").text
-	
-	'Send query
-	With oHTTP
-		.open "GET", sSiteUrl & "/_api/web/lists/getbytitle('WDAPP')/items?$select=Title&$filter=(Title eq '" & sProjectName & "')", False        
-		.setRequestHeader "Authorization", "Bearer " & sAccessToken
-		.setRequestHeader "Accept", "application/atom+xml;odata=verbose"
-		.setRequestHeader "X-RequestDigest", sXDigest
-		.send
-	End With 
-	
-	'Patch record
-	Dim oNet : Set oNet = CreateObject("WScript.Network")
-	Dim oSysInfo : Set oSysInfo = CreateObject("ADSystemInfo")
-	Dim oLDAP : Set oLDAP = GetObject("LDAP://" & oSysInfo.UserName)
-	oXML.loadXML oHTTP.responseText
-	Dim url : url = oXML.selectSingleNode("//feed").attributes.getNamedItem("xml:base").text
-	url = url & oXML.selectSingleNode("//entry/link[@rel=""edit""]").attributes.getNamedItem("href").text
-  	
-  
-	With oHTTP
-		.open "PATCH", url, False
-		.setRequestHeader "Accept","application/json;odata=verbose"
-		.setRequestHeader "Content-Type","application/json"
-		.setRequestHeader "Authorization","Bearer " & sAccessToken
-		.setRequestHeader "If-Match","*"
-		.send "{""ComputerName"":""" & Trim(oNet.ComputerName) & """,""UserName"":""" & Trim(oLDAP.displayName) & """,""UserID"":""" & Trim(oLDAP.sAMAccountName) & """}"
-	End With
-	
-
-	
-End Function
