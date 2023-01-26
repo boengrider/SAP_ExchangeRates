@@ -37,7 +37,7 @@ Dim oMAIL : Set oMAIL = New Mailer
 Dim oRATECHECK : Set oRATECHECK = New RateCheck_v1
 Dim oRATES
 Dim oFILE
-oMAIL.AddAdmin = "tomas.ac@volvo.com;tomas.chudik@volvo.com"
+oMAIL.AddAdmin = "jon.doe@jon.doe.com"
 oRX.Pattern = DATE_RX
 oRX.Global = True
 oRX.IgnoreCase = True
