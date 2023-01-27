@@ -1,4 +1,4 @@
-## Class definitions used in the main script
+## Classes used in the main script
 
 * RateUpload_v1 implemented in **ExchangeRateUpload.cls.vbs**
 
