@@ -1,6 +1,9 @@
 ## Class definitions used in the main script
 
 * RateUpload_v1 implemented in ExchangeRateUpload.cls.vbs
+* ```json
+   // code for coloring
+```
 
 * SAPLauncher implemented in SAPLauncher.cls.vbs
 
